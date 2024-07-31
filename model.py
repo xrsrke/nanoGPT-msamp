@@ -72,7 +72,10 @@ class CausalSelfAttention(nn.Module):
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
-        y = self.resid_dropout(self.c_proj(y))
+        print(f"before self.c_proj(y), y.dtype={y.dtype}")
+        y = self.c_proj(y)
+        print(f"before self.resid_dropout(y), y.dtype={y.dtype}")
+        y = self.resid_dropout(y)
         return y
 
 class MLP(nn.Module):
@@ -85,9 +88,13 @@ class MLP(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
+        print(f"before self.c_fc(x), x.dtype={x.dtype}")
         x = self.c_fc(x)
+        print(f"before self.gelu(x), x.dtype={x.dtype}")
         x = self.gelu(x)
+        print(f"before self.c_proj(x), x.dtype={x.dtype}")
         x = self.c_proj(x)
+        print(f"before self.dropout(x), x.dtype={x.dtype}")
         x = self.dropout(x)
         return x
 
@@ -101,7 +108,9 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(self, x):
+        print(f"### [start of attn] before self.attn(self.ln_1(x)), x.dtype={x.dtype}")
         x = x + self.attn(self.ln_1(x))
+        print(f"### [start of mlp] before self.mlp(self.ln_2(x)), x.dtype={x.dtype}")
         x = x + self.mlp(self.ln_2(x))
         return x
 
@@ -175,17 +184,30 @@ class GPT(nn.Module):
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
         # forward the GPT model itself
+        print(f"before self.transformer.wte(idx), idx.dtype={idx.dtype}")
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
+        print(f"before self.transformer.wpe(pos), pos.dtype={pos.dtype}")
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
+        print(f"before self.transformer.drop(tok_emb + pos_emb), tok_emb.dtype={tok_emb.dtype}, pos_emb.dtype={pos_emb.dtype}")
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
+
+        print(f"before self.transformer.h(x), x.dtype={x.dtype}")
+
+        for l_idx, block in enumerate(self.transformer.h):
+            print(f"layer_idx: {l_idx+1}")
             x = block(x)
+        
+        print(f"before self.transformer.ln_f(x), x.dtype={x.dtype}")
         x = self.transformer.ln_f(x)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
+            print(f"before self.lm_head(x), x.dtype={x.dtype}")
             logits = self.lm_head(x)
+            print(f"before F.cross_entropy, logits.dtype={logits.dtype}, targets.dtype={targets.dtype}")
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            print(f"loss.dtype={loss.dtype}")
+            assert 1 == 1
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
