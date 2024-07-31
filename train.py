@@ -255,6 +255,14 @@ if wandb_log and master_process:
     import wandb
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
+
+for n, p in model.named_parameters():
+    print(f"name: {n}, dtype: {p.dtype}")
+
+
+for m in model.named_modules():
+    print(m)
+
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
 t0 = time.time()
